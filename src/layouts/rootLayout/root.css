@@ -1,0 +1,33 @@
+.rootLayout {
+    padding: 16px 64px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.heading {
+    font-size: 28px;
+    color: #e55571;
+}
+
+
+
+header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    font-weight: bold;
+    gap: 8px;
+}
+
+
+
+main {
+    flex: 1;
+    overflow: hidden;
+}
