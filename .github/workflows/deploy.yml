@@ -74,15 +74,26 @@ jobs:
         
         # Create deployment directory
         echo "Creating deployment directory..."
-        ssh -o ConnectTimeout=30 ec2 "mkdir -p ~/deployments/${{ github.sha }}"
+        ssh -o ConnectTimeout=30 ec2 "mkdir -p ~/deployments/${{ github.sha }}/frontend ~/deployments/${{ github.sha }}/backend"
         
-        # Copy frontend build
+        # Copy frontend build in chunks
         echo "Copying frontend build..."
-        scp -o ConnectTimeout=30 -r ./dist/* ec2:~/deployments/${{ github.sha }}/frontend/
+        for file in ./dist/*; do
+          echo "Copying $file..."
+          scp -o ConnectTimeout=30 -v "$file" ec2:~/deployments/${{ github.sha }}/frontend/
+        done
         
-        # Copy backend
+        # Copy backend files in chunks
         echo "Copying backend files..."
-        scp -o ConnectTimeout=30 -r ./backend/* ec2:~/deployments/${{ github.sha }}/backend/
+        for file in ./backend/*; do
+          if [ -f "$file" ]; then
+            echo "Copying $file..."
+            scp -o ConnectTimeout=30 -v "$file" ec2:~/deployments/${{ github.sha }}/backend/
+          elif [ -d "$file" ]; then
+            echo "Copying directory $file..."
+            scp -o ConnectTimeout=30 -v -r "$file" ec2:~/deployments/${{ github.sha }}/backend/
+          fi
+        done
         
         # Install backend dependencies on server
         echo "Installing backend dependencies..."
