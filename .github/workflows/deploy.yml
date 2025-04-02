@@ -1,0 +1,91 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  AWS_REGION: ap-south-1
+  EC2_HOST: ${{ secrets.EC2_HOST }}
+  EC2_USER: ${{ secrets.EC2_USER }}
+  PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    # Frontend Build
+    - name: Install Frontend Dependencies
+      run: npm install
+      working-directory: ./
+
+    - name: Build Frontend
+      run: npm run build
+      working-directory: ./
+
+    # Backend Build
+    - name: Install Backend Dependencies
+      run: npm install
+      working-directory: ./backend
+
+    - name: Build Backend
+      run: npm run build
+      working-directory: ./backend
+
+    # Setup SSH
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ env.PRIVATE_KEY }}" > ~/.ssh/ai-nexus-keypair
+        chmod 600 ~/.ssh/ai-nexus-keypair
+        cat >>~/.ssh/config <<END
+        Host ec2
+          HostName ${{ env.EC2_HOST }}
+          User ${{ env.EC2_USER }}
+          IdentityFile ~/.ssh/ai-nexus-keypair
+          StrictHostKeyChecking no
+        END
+
+    # Deploy to EC2
+    - name: Deploy to EC2
+      run: |
+        # Create deployment directory
+        ssh ec2 "mkdir -p ~/deployments/${{ github.sha }}"
+        
+        # Copy frontend build
+        scp -r ./dist/* ec2:~/deployments/${{ github.sha }}/frontend/
+        
+        # Copy backend
+        scp -r ./backend/* ec2:~/deployments/${{ github.sha }}/backend/
+        
+        # Install backend dependencies on server
+        ssh ec2 "cd ~/deployments/${{ github.sha }}/backend && npm install --production"
+        
+        # Update symlinks
+        ssh ec2 "ln -sfn ~/deployments/${{ github.sha }}/frontend ~/current-frontend"
+        ssh ec2 "ln -sfn ~/deployments/${{ github.sha }}/backend ~/current-backend"
+        
+        # Restart services
+        ssh ec2 "pm2 restart frontend || pm2 start --name frontend nginx"
+        ssh ec2 "pm2 restart backend || pm2 start --name backend 'node ~/current-backend/index.js'"
+        
+        # Cleanup old deployments (keep last 5)
+        ssh ec2 "ls -dt ~/deployments/* | tail -n +6 | xargs -r rm -rf" 
