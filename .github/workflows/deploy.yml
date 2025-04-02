@@ -80,18 +80,29 @@ jobs:
         echo "Copying frontend build..."
         scp -o ConnectTimeout=30 -r ./dist/* ec2:~/deployments/${{ github.sha }}/frontend/
         
-        # Copy backend
+        # Copy backend files in chunks
         echo "Copying backend files..."
-        scp -o ConnectTimeout=30 -r ./backend/* ec2:~/deployments/${{ github.sha }}/backend/
+        
+        # First, create a tar archive of the backend
+        echo "Creating backend archive..."
+        tar -czf backend.tar.gz -C ./backend .
+        
+        # Copy the archive to the server
+        echo "Transferring backend archive..."
+        scp -o ConnectTimeout=30 backend.tar.gz ec2:~/deployments/${{ github.sha }}/backend.tar.gz
+        
+        # Extract the archive on the server
+        echo "Extracting backend files..."
+        ssh -o ConnectTimeout=30 ec2 "cd ~/deployments/${{ github.sha }} && tar -xzf backend.tar.gz && rm backend.tar.gz"
         
         # Install backend dependencies on server
         echo "Installing backend dependencies..."
-        ssh -o ConnectTimeout=30 ec2 "cd ~/deployments/${{ github.sha }}/backend && npm install --production"
+        ssh -o ConnectTimeout=30 ec2 "cd ~/deployments/${{ github.sha }} && npm install --production"
         
         # Update symlinks
         echo "Updating symlinks..."
         ssh -o ConnectTimeout=30 ec2 "ln -sfn ~/deployments/${{ github.sha }}/frontend ~/current-frontend"
-        ssh -o ConnectTimeout=30 ec2 "ln -sfn ~/deployments/${{ github.sha }}/backend ~/current-backend"
+        ssh -o ConnectTimeout=30 ec2 "ln -sfn ~/deployments/${{ github.sha }} ~/current-backend"
         
         # Restart services
         echo "Restarting services..."
@@ -101,5 +112,8 @@ jobs:
         # Cleanup old deployments
         echo "Cleaning up old deployments..."
         ssh -o ConnectTimeout=30 ec2 "ls -dt ~/deployments/* | tail -n +6 | xargs -r rm -rf"
+        
+        # Cleanup local archive
+        rm -f backend.tar.gz
         
         echo "Deployment completed successfully!" 
