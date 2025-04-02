@@ -58,30 +58,48 @@ jobs:
           User ${{ env.EC2_USER }}
           IdentityFile ~/.ssh/ai-nexus-keypair
           StrictHostKeyChecking no
+          ConnectTimeout 30
+          ServerAliveInterval 60
+          ServerAliveCountMax 3
         END
 
     # Deploy to EC2
     - name: Deploy to EC2
       run: |
+        echo "Starting deployment process..."
+        
+        # Test SSH connection first
+        echo "Testing SSH connection..."
+        ssh -o ConnectTimeout=30 ec2 "echo 'SSH connection successful'"
+        
         # Create deployment directory
-        ssh ec2 "mkdir -p ~/deployments/${{ github.sha }}"
+        echo "Creating deployment directory..."
+        ssh -o ConnectTimeout=30 ec2 "mkdir -p ~/deployments/${{ github.sha }}"
         
         # Copy frontend build
-        scp -r ./dist/* ec2:~/deployments/${{ github.sha }}/frontend/
+        echo "Copying frontend build..."
+        scp -o ConnectTimeout=30 -r ./dist/* ec2:~/deployments/${{ github.sha }}/frontend/
         
         # Copy backend
-        scp -r ./backend/* ec2:~/deployments/${{ github.sha }}/backend/
+        echo "Copying backend files..."
+        scp -o ConnectTimeout=30 -r ./backend/* ec2:~/deployments/${{ github.sha }}/backend/
         
         # Install backend dependencies on server
-        ssh ec2 "cd ~/deployments/${{ github.sha }}/backend && npm install --production"
+        echo "Installing backend dependencies..."
+        ssh -o ConnectTimeout=30 ec2 "cd ~/deployments/${{ github.sha }}/backend && npm install --production"
         
         # Update symlinks
-        ssh ec2 "ln -sfn ~/deployments/${{ github.sha }}/frontend ~/current-frontend"
-        ssh ec2 "ln -sfn ~/deployments/${{ github.sha }}/backend ~/current-backend"
+        echo "Updating symlinks..."
+        ssh -o ConnectTimeout=30 ec2 "ln -sfn ~/deployments/${{ github.sha }}/frontend ~/current-frontend"
+        ssh -o ConnectTimeout=30 ec2 "ln -sfn ~/deployments/${{ github.sha }}/backend ~/current-backend"
         
         # Restart services
-        ssh ec2 "pm2 restart frontend || pm2 start --name frontend nginx"
-        ssh ec2 "pm2 restart backend || pm2 start --name backend 'node ~/current-backend/index.js'"
+        echo "Restarting services..."
+        ssh -o ConnectTimeout=30 ec2 "pm2 restart frontend || pm2 start --name frontend nginx"
+        ssh -o ConnectTimeout=30 ec2 "pm2 restart backend || pm2 start --name backend 'node ~/current-backend/index.js'"
         
-        # Cleanup old deployments (keep last 5)
-        ssh ec2 "ls -dt ~/deployments/* | tail -n +6 | xargs -r rm -rf" 
+        # Cleanup old deployments
+        echo "Cleaning up old deployments..."
+        ssh -o ConnectTimeout=30 ec2 "ls -dt ~/deployments/* | tail -n +6 | xargs -r rm -rf"
+        
+        echo "Deployment completed successfully!" 
