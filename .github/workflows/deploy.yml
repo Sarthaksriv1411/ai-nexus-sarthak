@@ -87,9 +87,16 @@ jobs:
         echo "Creating backend archive..."
         tar -czf backend.tar.gz -C ./backend .
         
-        # Copy the archive to the server
+        # Install rsync if not present
+        sudo apt-get update && sudo apt-get install -y rsync
+        
+        # Copy the archive to the server using rsync
         echo "Transferring backend archive..."
-        scp -o ConnectTimeout=30 backend.tar.gz ec2:~/deployments/${{ github.sha }}/backend.tar.gz
+        rsync -avz --progress --timeout=30 -e "ssh -o ConnectTimeout=30" backend.tar.gz ec2:~/deployments/${{ github.sha }}/backend.tar.gz
+        
+        # Verify the transfer
+        echo "Verifying transfer..."
+        ssh -o ConnectTimeout=30 ec2 "ls -lh ~/deployments/${{ github.sha }}/backend.tar.gz"
         
         # Extract the archive on the server
         echo "Extracting backend files..."
