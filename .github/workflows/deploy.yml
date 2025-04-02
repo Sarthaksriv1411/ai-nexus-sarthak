@@ -111,10 +111,49 @@ jobs:
         ssh -o ConnectTimeout=30 ec2 "ln -sfn ~/deployments/${{ github.sha }}/frontend ~/current-frontend"
         ssh -o ConnectTimeout=30 ec2 "ln -sfn ~/deployments/${{ github.sha }} ~/current-backend"
         
-        # Restart services
-        echo "Restarting services..."
-        ssh -o ConnectTimeout=30 ec2 "pm2 restart frontend || pm2 start --name frontend nginx"
-        ssh -o ConnectTimeout=30 ec2 "pm2 restart backend || pm2 start --name backend 'node ~/current-backend/index.js'"
+        # Configure and restart services
+        echo "Configuring and restarting services..."
+        ssh -o ConnectTimeout=30 ec2 << 'EOF'
+        # Stop existing services
+        pm2 delete all || true
+        
+        # Configure Nginx for frontend
+        sudo tee /etc/nginx/sites-available/default << 'NGINX'
+        server {
+            listen 80;
+            server_name _;
+            
+            root /home/ubuntu/current-frontend;
+            index index.html;
+            
+            location / {
+                try_files \$uri \$uri/ /index.html;
+            }
+            
+            location /api {
+                proxy_pass http://localhost:3000;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade \$http_upgrade;
+                proxy_set_header Connection 'upgrade';
+                proxy_set_header Host \$host;
+                proxy_cache_bypass \$http_upgrade;
+            }
+        }
+        NGINX
+        
+        # Restart Nginx
+        sudo systemctl restart nginx
+        
+        # Start backend service
+        cd ~/current-backend
+        pm2 start index.js --name backend
+        
+        # Save PM2 process list
+        pm2 save
+        
+        # Configure PM2 to start on system boot
+        pm2 startup
+        EOF
         
         # Cleanup old deployments
         echo "Cleaning up old deployments..."
