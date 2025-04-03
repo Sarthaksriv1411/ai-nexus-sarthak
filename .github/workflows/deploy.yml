@@ -20,7 +20,7 @@ jobs:
 
       - name: Install and Build Frontend (React + Vite)
         run: |
-          cd client
+          cd src
           npm install
           npm run build
 
@@ -46,7 +46,7 @@ jobs:
             sudo git pull origin main
 
             # Setup Frontend
-            cd client
+            cd src
             npm install
             npm run build
             sudo cp -r dist/* /var/www/html/
