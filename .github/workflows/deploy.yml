@@ -32,18 +32,23 @@ jobs:
           AWS_ACCESS_KEY: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+
         run: |
           echo "$SSH_PRIVATE_KEY" > ai-nexus-sarthak.pem
           chmod 600 ai-nexus-sarthak.pem
           
-          ssh -o StrictHostKeyChecking=no -i ai-nexus-sarthak.pem $AWS_USER@$AWS_HOST << 'EOF'
-            # Update system and install dependencies
-            sudo apt update && sudo apt install -y nginx nodejs npm
-            
-            # Clone or pull latest changes
-            cd /var/www/ai-nexus || (sudo git clone https://github.com/Sarthaksriv1411/ai-nexus-sarthak.git /var/www/ai-nexus && cd /var/www/ai-nexus)
-            sudo git reset --hard
-            sudo git pull origin main
+          ssh -o StrictHostKeyChecking=no -i private_key.pem $AWS_USER@$AWS_HOST << 'EOF'
+            # Ensure deployment directory exists
+            sudo mkdir -p /var/www/ai-nexus
+            cd /var/www/ai-nexus
+
+            # Clone or update the repository
+            if [ ! -d ".git" ]; then
+              sudo git clone https://github.com/YOUR_USERNAME/ai-nexus.git .
+            else
+              sudo git reset --hard
+              sudo git pull origin main
+            fi
 
             # Setup Frontend
             cd src
@@ -52,10 +57,14 @@ jobs:
             sudo cp -r dist/* /var/www/html/
 
             # Setup Backend
-            cd ../server
+            cd ../backend
             npm install
-            pm2 stop all || true
+
+            # Install PM2 and Restart Backend
+            sudo npm install -g pm2
+            pm2 stop ai-nexus-backend || true
             pm2 start index.js --name ai-nexus-backend
+            pm2 save
 
             # Restart Nginx
             sudo systemctl restart nginx
