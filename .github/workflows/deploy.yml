@@ -44,7 +44,7 @@ jobs:
 
             # Clone or update the repository
             if [ ! -d ".git" ]; then
-              sudo git clone https://github.com/YOUR_USERNAME/ai-nexus.git .
+              sudo git clone https://github.com/Sarthaksriv1411/ai-nexus-sarthak.git .
             else
               sudo git reset --hard
               sudo git pull origin main
