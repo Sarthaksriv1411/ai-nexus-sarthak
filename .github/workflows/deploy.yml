@@ -26,12 +26,12 @@ jobs:
 
       - name: Deploy to AWS via SSH
         env:
-          AWS_HOST: ${{ secrets.AWS_HOST }}
-          AWS_USER: ${{ secrets.AWS_USER }}
+          AWS_HOST: ${{ secrets.EC2_HOST }}
+          AWS_USER: ${{ secrets.EC2_USER }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
-          AWS_ACCESS_KEY: ${{ secrets.AWS_ACCESS_KEY }}
-          AWS_SECRET_KEY: ${{ secrets.AWS_SECRET_KEY }}
-          SSH_PRIVATE_KEY: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
+          AWS_ACCESS_KEY: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
         run: |
           echo "$SSH_PRIVATE_KEY" > ai-nexus-sarthak.pem
           chmod 600 ai-nexus-sarthak.pem
