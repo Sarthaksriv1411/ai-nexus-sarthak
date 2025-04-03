@@ -13,10 +13,10 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: 18
+      - name: Install Node.js 20
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+          sudo apt-get install -y nodejs
 
       - name: Install and Build Frontend (React + Vite)
         run: |
@@ -47,12 +47,24 @@ jobs:
               sudo git clone https://github.com/Sarthaksriv1411/ai-nexus-sarthak.git .
             else
               sudo git reset --hard
-              sudo git pull origin main
+              sudo git pull origin master
             fi
+
+            # Install Vite globally
+            sudo npm install -g vite
+
+             # Fix permissions
+            sudo chown -R $USER:$USER /var/www/ai-nexus
+            sudo chmod -R 755 /var/www/ai-nexus
+
+            # Install Node.js 20
+            curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+            sudo apt-get install -y nodejs
 
             # Setup Frontend
             cd src
             npm install
+            sudo npm install -g vite
             npm run build
             sudo cp -r dist/* /var/www/html/
 
