@@ -33,10 +33,10 @@ jobs:
           AWS_SECRET_KEY: ${{ secrets.AWS_SECRET_KEY }}
           SSH_PRIVATE_KEY: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
         run: |
-          echo "$SSH_PRIVATE_KEY" > private_key.pem
-          chmod 600 private_key.pem
+          echo "$SSH_PRIVATE_KEY" > ai-nexus-sarthak.pem
+          chmod 600 ai-nexus-sarthak.pem
           
-          ssh -o StrictHostKeyChecking=no -i private_key.pem $AWS_USER@$AWS_HOST << 'EOF'
+          ssh -o StrictHostKeyChecking=no -i ai-nexus-sarthak.pem $AWS_USER@$AWS_HOST << 'EOF'
             # Update system and install dependencies
             sudo apt update && sudo apt install -y nginx nodejs npm
             
