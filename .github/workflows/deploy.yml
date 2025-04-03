@@ -1,165 +1,65 @@
-name: Deploy to EC2
+name: Deploy to AWS
 
 on:
   push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
-
-env:
-  AWS_REGION: ap-south-1
-  EC2_HOST: ${{ secrets.EC2_HOST }}
-  EC2_USER: ${{ secrets.EC2_USER }}
-  PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+    branches:
+      - main  # Change to your deployment branch if different
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
-    - uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v3
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-        cache: 'npm'
+      - name: Install and Build Frontend (React + Vite)
+        run: |
+          cd client
+          npm install
+          npm run build
 
-    # Frontend Build
-    - name: Install Frontend Dependencies
-      run: npm install
-      working-directory: ./
-
-    - name: Build Frontend
-      run: npm run build
-      working-directory: ./
-
-    # Backend Setup
-    - name: Install Backend Dependencies
-      run: npm install
-      working-directory: ./backend
-
-    # Setup SSH
-    - name: Setup SSH
-      run: |
-        mkdir -p ~/.ssh
-        echo "${{ env.PRIVATE_KEY }}" > ~/.ssh/ai-nexus-keypair
-        chmod 600 ~/.ssh/ai-nexus-keypair
-        cat >>~/.ssh/config <<END
-        Host ec2
-          HostName ${{ env.EC2_HOST }}
-          User ${{ env.EC2_USER }}
-          IdentityFile ~/.ssh/ai-nexus-keypair
-          StrictHostKeyChecking no
-          ConnectTimeout 30
-          ServerAliveInterval 60
-          ServerAliveCountMax 3
-        END
-
-    # Deploy to EC2
-    - name: Deploy to EC2
-      run: |
-        echo "Starting deployment process..."
-        
-        # Test SSH connection first
-        echo "Testing SSH connection..."
-        ssh -o ConnectTimeout=30 ec2 "echo 'SSH connection successful'"
-        
-        # Create deployment directory
-        echo "Creating deployment directory..."
-        ssh -o ConnectTimeout=30 ec2 "mkdir -p ~/deployments/${{ github.sha }}/frontend ~/deployments/${{ github.sha }}/backend"
-        
-        # Copy frontend build
-        echo "Copying frontend build..."
-        scp -o ConnectTimeout=30 -r ./dist/* ec2:~/deployments/${{ github.sha }}/frontend/
-        
-        # Copy backend files in chunks
-        echo "Copying backend files..."
-        
-        # First, create a tar archive of the backend
-        echo "Creating backend archive..."
-        tar -czf backend.tar.gz -C ./backend .
-        
-        # Install rsync if not present
-        sudo apt-get update && sudo apt-get install -y rsync
-        
-        # Copy the archive to the server using rsync
-        echo "Transferring backend archive..."
-        rsync -avz --progress --timeout=30 -e "ssh -o ConnectTimeout=30" backend.tar.gz ec2:~/deployments/${{ github.sha }}/backend.tar.gz
-        
-        # Verify the transfer
-        echo "Verifying transfer..."
-        ssh -o ConnectTimeout=30 ec2 "ls -lh ~/deployments/${{ github.sha }}/backend.tar.gz"
-        
-        # Extract the archive on the server
-        echo "Extracting backend files..."
-        ssh -o ConnectTimeout=30 ec2 "cd ~/deployments/${{ github.sha }} && tar -xzf backend.tar.gz && rm backend.tar.gz"
-        
-        # Install backend dependencies on server
-        echo "Installing backend dependencies..."
-        ssh -o ConnectTimeout=30 ec2 "cd ~/deployments/${{ github.sha }} && npm install --production"
-        
-        # Update symlinks
-        echo "Updating symlinks..."
-        ssh -o ConnectTimeout=30 ec2 "ln -sfn ~/deployments/${{ github.sha }}/frontend ~/current-frontend"
-        ssh -o ConnectTimeout=30 ec2 "ln -sfn ~/deployments/${{ github.sha }} ~/current-backend"
-        
-        # Configure and restart services
-        echo "Configuring and restarting services..."
-        ssh -o ConnectTimeout=30 ec2 << 'EOF'
-        # Stop existing services
-        pm2 delete all || true
-        
-        # Configure Nginx for frontend
-        sudo tee /etc/nginx/sites-available/default << 'NGINX'
-        server {
-            listen 80;
-            server_name _;
+      - name: Deploy to AWS via SSH
+        env:
+          AWS_HOST: ${{ secrets.AWS_HOST }}
+          AWS_USER: ${{ secrets.AWS_USER }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCESS_KEY: ${{ secrets.AWS_ACCESS_KEY }}
+          AWS_SECRET_KEY: ${{ secrets.AWS_SECRET_KEY }}
+          SSH_PRIVATE_KEY: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
+        run: |
+          echo "$SSH_PRIVATE_KEY" > private_key.pem
+          chmod 600 private_key.pem
+          
+          ssh -o StrictHostKeyChecking=no -i private_key.pem $AWS_USER@$AWS_HOST << 'EOF'
+            # Update system and install dependencies
+            sudo apt update && sudo apt install -y nginx nodejs npm
             
-            root /home/ubuntu/current-frontend;
-            index index.html;
-            
-            location / {
-                try_files \$uri \$uri/ /index.html;
-            }
-            
-            location /api {
-                proxy_pass http://localhost:3000;
-                proxy_http_version 1.1;
-                proxy_set_header Upgrade \$http_upgrade;
-                proxy_set_header Connection 'upgrade';
-                proxy_set_header Host \$host;
-                proxy_cache_bypass \$http_upgrade;
-            }
-        }
-        NGINX
-        
-        # Restart Nginx
-        sudo systemctl restart nginx
-        
-        # Start backend service
-        cd ~/current-backend
-        pm2 start npm --name backend -- start
-        
-        # Save PM2 process list
-        pm2 save --force
-        
-        # Configure PM2 to start on system boot
-        sudo env PATH=$PATH:/usr/bin /usr/local/lib/node_modules/pm2/bin/pm2 startup systemd -u ubuntu --hp /home/ubuntu
-        EOF
-        
-        # Cleanup old deployments
-        echo "Cleaning up old deployments..."
-        ssh -o ConnectTimeout=30 ec2 "ls -dt ~/deployments/* | tail -n +6 | xargs -r rm -rf"
-        
-        # Cleanup local archive
-        rm -f backend.tar.gz
-        
-        echo "Deployment completed successfully!" 
+            # Clone or pull latest changes
+            cd /var/www/ai-nexus || (sudo git clone https://github.com/Sarthaksriv1411/ai-nexus-sarthak.git /var/www/ai-nexus && cd /var/www/ai-nexus)
+            sudo git reset --hard
+            sudo git pull origin main
+
+            # Setup Frontend
+            cd client
+            npm install
+            npm run build
+            sudo cp -r dist/* /var/www/html/
+
+            # Setup Backend
+            cd ../server
+            npm install
+            pm2 stop all || true
+            pm2 start index.js --name ai-nexus-backend
+
+            # Restart Nginx
+            sudo systemctl restart nginx
+          EOF
+
+      - name: Cleanup Private Key
+        run: rm -f private_key.pem
