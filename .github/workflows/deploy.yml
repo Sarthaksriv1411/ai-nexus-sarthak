@@ -37,7 +37,7 @@ jobs:
           echo "$SSH_PRIVATE_KEY" > ai-nexus-sarthak.pem
           chmod 600 ai-nexus-sarthak.pem
           
-          ssh -o StrictHostKeyChecking=no -i private_key.pem $AWS_USER@$AWS_HOST << 'EOF'
+          ssh -o StrictHostKeyChecking=no -i ai-nexus-sarthak.pem $AWS_USER@$AWS_HOST << 'EOF'
             # Ensure deployment directory exists
             sudo mkdir -p /var/www/ai-nexus
             cd /var/www/ai-nexus
